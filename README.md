@@ -1,13 +1,5 @@
 # COMP SCI 3SH3 – Assignment 4 (Group 64)
 
-## Files
-
-| File | Description |
-|---|---|
-| `Assignment4.c` | Source code |
-| `addresses.txt` | Logical addresses to translate (1,000 addresses) |
-| `BACKING_STORE.bin` | Backing store (65,536 bytes), used for page faults |
-
 ## How to compile and run
 
 Run from the folder that contains `addresses.txt` and `BACKING_STORE.bin`:
