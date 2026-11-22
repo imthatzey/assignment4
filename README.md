@@ -30,8 +30,6 @@ gcc -o assignment4 Assignment4.c
 
 The TLB hit count matches the sample `output.txt` (54 hits).
 
-**Note for Part 3:** the page fault function should be `int handle_page_fault(int page, int *evicted_page)`. It returns the frame number and sets `*evicted_page` to the page it replaced, or -1 if it used an empty frame.
-
 ### Bakhtawar
 
 <!-- To be added -->
