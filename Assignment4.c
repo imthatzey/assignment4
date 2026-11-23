@@ -27,7 +27,6 @@
  */
 
 #include <stdio.h>
-#include <stdlib.h>
 #include <string.h>     /* memcpy */
 #include <fcntl.h>      /* open */
 #include <unistd.h>     /* close */
@@ -159,7 +158,7 @@ int handle_page_fault(int page, int *evicted_page)
 
 
 /* =====================================================================
- * PART 1
+ * MAIN - address translation loop (Part 1)
  * ===================================================================== */
 
 int main(void)
@@ -215,11 +214,8 @@ int main(void)
                 frame = handle_page_fault(page, &evicted_page);
             }
 
-            /* The frame was resolved via the page table (with or without a
-             * page fault), so the page must now go into the TLB, once.
-             *  - A page was replaced: TLB_Update puts the new page in the
-             *    replaced page's slot (or falls back to TLB_Add).
-             *  - Otherwise: TLB_Add. */
+            /* Add the page to the TLB. If a page was replaced, TLB_Update
+             * reuses its slot; otherwise TLB_Add. */
             if (evicted_page != -1)
                 TLB_Update(evicted_page, page, frame);
             else
