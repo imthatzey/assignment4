@@ -13,8 +13,11 @@
  *   - search_TLB, TLB_Add (FIFO), TLB_Update
  *   - TLB implemented as a circular array of 16 entries
  *
- * The page fault handler (Part 3) is only a placeholder below so the program
- * compiles and runs.
+ * PART 3: Page faults.
+ *   - BACKING_STORE.bin opened with open() and mapped with mmap()
+ *   - on a page fault, the 256-byte page is copied into a frame with memcpy()
+ *   - physical memory is a circular array of signed char, so frames are
+ *     reused in FIFO order (the oldest page is replaced)
  *
  * Logical address space : 2^16 = 65,536 bytes  -> 16-bit addresses
  * Physical address space: 2^15 = 32,768 bytes  -> 15-bit addresses
@@ -25,6 +28,10 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>     /* memcpy */
+#include <fcntl.h>      /* open */
+#include <unistd.h>     /* close */
+#include <sys/mman.h>   /* mmap, munmap */
 
 #define OFFSET_BITS  8
 #define OFFSET_MASK  0xFF                 /* low 8 bits: 1111 1111 */
@@ -32,6 +39,8 @@
 #define NUM_PAGES    256
 #define NUM_FRAMES   128
 #define TLB_SIZE     16
+#define BACKING_STORE_SIZE  65536                     /* 256 pages x 256 bytes */
+#define MEMORY_SIZE         (NUM_FRAMES * PAGE_SIZE)  /* 128 frames x 256 bytes */
 
 /* Page table: indexed by page number, holds the frame number, or -1 if the
  * page is not in memory. */
@@ -103,28 +112,48 @@ void TLB_Update(int old_page, int new_page, int new_frame)
 
 
 /* =====================================================================
- * PART 3 PLACEHOLDER - replace with the real page fault handler.
+ * PART 3 - Page faults
  * ===================================================================== */
 
-/* Just hands out frames 0, 1, 2, ... in order so there is a frame number to
- * work with. It does NOT read BACKING_STORE.bin and does NOT replace pages
- * properly when memory is full.
- *
- * What the real version must do (handout Part 3):
- *   - load `page` from BACKING_STORE.bin into a frame (FIFO replacement)
- *   - set page_table[page] = frame, and page_table[old page] = -1 if a page
- *     was replaced
- *   - store the replaced page number in *evicted_page, or -1 if a free frame
- *     was used (main uses this to call TLB_Update)
- *   - return the frame number */
-static int placeholder_next_frame = 0;
+/* BACKING_STORE.bin mapped into memory: page p starts at byte p * 256. */
+signed char *backingstore_ptr;
 
+/* Physical memory: 128 frames of 256 bytes. Frame f starts at byte f * 256. */
+static signed char physical_memory[MEMORY_SIZE];
+
+/* Which page is in each frame (-1 = empty). The page table maps
+ * page -> frame; this is the reverse, so that when a frame is reused we know
+ * which page is being thrown out. */
+int frame_to_page[NUM_FRAMES];
+
+/* Next frame to fill. Frames are used 0, 1, ..., 127 and then reused in the
+ * same order, so once memory is full this is always the oldest page (FIFO). */
+int next_frame = 0;
+
+/* Load `page` from the backing store into memory and return its frame.
+ * Sets *evicted_page to the page that was replaced, or -1 if the frame
+ * was empty. */
 int handle_page_fault(int page, int *evicted_page)
 {
-    int frame = placeholder_next_frame % NUM_FRAMES;
-    placeholder_next_frame++;
+    int frame = next_frame;
+
+    /* If this frame already holds a page, that page is no longer in memory,
+     * so its page table entry must go back to -1. */
+    int old_page = frame_to_page[frame];
+    if (old_page != -1)
+        page_table[old_page] = -1;
+    *evicted_page = old_page;
+
+    /* Copy the 256 bytes of `page` from the backing store into the frame. */
+    memcpy(physical_memory + frame * PAGE_SIZE,
+           backingstore_ptr + page * PAGE_SIZE,
+           PAGE_SIZE);
+
+    /* Record the new page in both tables. */
     page_table[page] = frame;
-    *evicted_page = -1;
+    frame_to_page[frame] = page;
+
+    next_frame = (next_frame + 1) % NUM_FRAMES;
     return frame;
 }
 
@@ -138,7 +167,22 @@ int main(void)
     /* Demand paging: no page is in memory at the start. */
     for (int i = 0; i < NUM_PAGES; i++)
         page_table[i] = -1;
+    for (int i = 0; i < NUM_FRAMES; i++)
+        frame_to_page[i] = -1;
     init_TLB();
+
+    /* Open the backing store and map the whole file into memory. */
+    int backingstore_fd = open("BACKING_STORE.bin", O_RDONLY);
+    if (backingstore_fd == -1) {
+        perror("open BACKING_STORE.bin");
+        return 1;
+    }
+    backingstore_ptr = mmap(NULL, BACKING_STORE_SIZE, PROT_READ, MAP_PRIVATE,
+                            backingstore_fd, 0);
+    if (backingstore_ptr == MAP_FAILED) {
+        perror("mmap BACKING_STORE.bin");
+        return 1;
+    }
 
     FILE *fptr = fopen("addresses.txt", "r");
     if (fptr == NULL) {
@@ -186,12 +230,16 @@ int main(void)
          * (same as frame * PAGE_SIZE + offset). */
         int physical_address = (frame << OFFSET_BITS) | offset;
 
-        /* Part 3 adds " Value=%d" (the byte read from physical memory). */
-        printf("Virtual address: %d Physical address = %d\n",
-               logical_address, physical_address);
+        /* The signed byte stored at that physical address. */
+        signed char value = physical_memory[physical_address];
+
+        printf("Virtual address: %d Physical address = %d Value=%d \n",
+               logical_address, physical_address, value);
     }
 
     fclose(fptr);
+    munmap(backingstore_ptr, BACKING_STORE_SIZE);
+    close(backingstore_fd);
 
     printf("Total addresses = %d \n", total);
     printf("Page_faults = %d \n", page_faults);
