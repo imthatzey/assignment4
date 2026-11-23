@@ -28,6 +28,8 @@ gcc -o assignment4 Assignment4.c
 - Wrote `TLB_Add` to add a page. When the TLB is full, it replaces the oldest entry (FIFO).
 - Wrote `TLB_Update` to put a new page in the slot of a page that was removed from memory.
 
+### Bakhtawar
+
 **Part 3: Page faults**
 
 - Opened `BACKING_STORE.bin` with `open()` and mapped it into memory with `mmap()`.
@@ -38,7 +40,3 @@ gcc -o assignment4 Assignment4.c
 - Printed the signed byte value stored at each physical address.
 
 The program's output matches the sample `output.txt` exactly (538 page faults, 54 TLB hits).
-
-### Bakhtawar
-
-<!-- To be added -->
